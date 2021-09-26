@@ -1,0 +1,316 @@
+//#define FASTLED_ESP32_I2S
+#include <ArduinoOTA.h>
+#include <ESPmDNS.h>
+#include <FastLED.h>
+#include <WiFi.h>
+#include <WiFiUdp.h>
+/******************************************************************************
+ * How to order and travel around a rhombic dodecahedron. A simple method
+ * deviced by Malt Whiskey. No difficult math involved.
+ *
+ * 12 faces
+ * 24 edges
+ * 14 vertices
+ *
+ * Rotate the object with a vertex that has 3 faces to the top.
+ * This is point A. At this point 3 data in are connected.
+ * All points connected to A are BCD. Going sideways down from
+ * BCD are EFG. Going straight down from BCD are HIJ. Going straight
+ * down from EFG are KLM. N is the bottom.
+ *
+ *            A
+ *       /    |    \
+ *      B     C     D
+ *     /|\   /|\   /|\
+ *      | \E/ | \F/ | \G/    D1 : AB BH HK KI <jump> EC CF FD DG    [0] - [339]
+ *     /H\ | /I\ | /J\ |     D2 : AC CI IL LJ <jump> FL LN NM MG  [340] - [679]
+ *        \|/   \|/   \|/    D3 : AD DJ JM MH <jump> GB BE EK KN  [680] - [1019]
+ *         K     L     M
+ *          \    |    /
+ *               N
+ *
+ * Led strips can't bend sideways, but they can bend in or out. On a vertex
+ * with 4 faces the led strip continues by bending slightly inwards. Since
+ * this is a crossing one strip is on top and one is on the bottom.
+ *
+ * On a vertex with 3 faces there is a wire bridge, so there aren't any leds
+ * on these corners. These corners are also end points so 1 strip stops here
+ * and another goes past here with a wire bridge. The data line will jump here
+ * from the strip end to another 3 faced vertex.
+ *
+ * All physical led strips segments are 85 leds and start on a 3 faced vertex.
+ * This means 42 leds on an edge, than the middle led in the corner of a 4
+ * faced vertex, than 42 leds an the other edge, than a bridge on a 3 faced
+ * vertex. Repeat 85 leds same way. The last led is an end point with a data
+ * jump to another 3 faced vertex. Repeat again except the last led has no jump
+ *
+ * So: 85 leds, bend, 85 leds, jump, 85 leds, bend, 85 leds, stop. This will
+ * cover 8 edges with 340 leds. This covers 1/3 of the dodecahedron, so 1020
+ * leds are needed in total.
+ *
+ * To travel all edges / all leds the strips are layed out in the order seen
+ * in the diagram. This is the 2D map of the object.
+ */
+const char* ssid = "-^..^-";
+const char* password = "qazwsxedc";
+const char* hostname = "Infinity";
+
+const uint8_t A1_PIN = 32;
+const uint8_t A2_PIN = 12;
+const uint8_t A3_PIN = 27;
+const uint8_t A5_PIN = 16;
+const uint8_t A6_PIN = 17;
+const uint8_t A7_PIN = 26;
+const uint8_t RELAY_PIN = 33;
+
+const uint16_t PIXELS = 340;
+CRGB leds[PIXELS * 6];
+
+class Dodecahedron {
+ public:
+  const static uint8_t edges = 24;
+  const static uint8_t vertices = 14;
+
+  struct Edge {
+    uint8_t node[2];
+    uint16_t led[2];
+  };
+
+  // Beware leds on the 4 faced vertices are on 2 edges. The 3 faced vertices
+  // have no leds on them. This makes all edges 43 leds long.
+  Edge Edges[edges] = {
+      {{'A', 'B'}, {0, 42}},    {{'B', 'H'}, {42, 84}},      // DIN1
+      {{'H', 'K'}, {85, 127}},  {{'K', 'I'}, {127, 169}},    //
+      {{'E', 'C'}, {170, 212}}, {{'C', 'D'}, {212, 254}},    //
+      {{'F', 'D'}, {255, 297}}, {{'D', 'G'}, {297, 339}},    //
+      {{'A', 'C'}, {340, 382}}, {{'C', 'I'}, {382, 424}},    // DIN2
+      {{'I', 'L'}, {425, 467}}, {{'L', 'J'}, {467, 509}},    //
+      {{'F', 'L'}, {510, 552}}, {{'L', 'N'}, {552, 594}},    //
+      {{'N', 'M'}, {595, 637}}, {{'M', 'G'}, {637, 679}},    //
+      {{'A', 'D'}, {680, 722}}, {{'D', 'J'}, {722, 764}},    // DIN3
+      {{'J', 'M'}, {765, 807}}, {{'M', 'H'}, {807, 849}},    //
+      {{'G', 'B'}, {850, 892}}, {{'B', 'E'}, {892, 934}},    //
+      {{'E', 'K'}, {935, 977}}, {{'K', 'N'}, {977, 1019}}};  //
+
+  struct Connection {
+    uint8_t faces;
+    uint8_t* nodes;
+  };
+
+  Connection Graph[vertices] = {{3, (uint8_t[]){'B', 'C', 'D'}},       // A
+                                {4, (uint8_t[]){'A', 'G', 'H', 'E'}},  // B
+                                {4, (uint8_t[]){'A', 'E', 'I', 'F'}},  // C
+                                {4, (uint8_t[]){'A', 'F', 'J', 'G'}},  // D
+                                {3, (uint8_t[]){'B', 'K', 'C'}},       // E
+                                {3, (uint8_t[]){'C', 'L', 'D'}},       // F
+                                {3, (uint8_t[]){'D', 'M', 'B'}},       // G
+                                {3, (uint8_t[]){'M', 'B', 'K'}},       // H
+                                {3, (uint8_t[]){'K', 'C', 'L'}},       // I
+                                {3, (uint8_t[]){'L', 'D', 'M'}},       // J
+                                {4, (uint8_t[]){'H', 'E', 'I', 'N'}},  // K
+                                {4, (uint8_t[]){'I', 'F', 'J', 'N'}},  // L
+                                {4, (uint8_t[]){'J', 'G', 'H', 'N'}},  // M
+                                {3, (uint8_t[]){'K', 'L', 'M'}}};      // N
+
+  Dodecahedron() {
+    for (int i = 0; i < edges; i++) {
+      Edges[i].node[0] -= 'A';
+      Edges[i].node[1] -= 'A';
+    }
+    for (int i = 0; i < vertices; i++)
+      for (int j = 0; j < Graph[i].faces; j++) {
+        Graph[i].nodes[j] -= 'A';
+      }
+  }
+
+  struct Whisp {
+    uint8_t edge;
+    uint8_t position;
+    uint8_t from;
+  };
+
+  // A -> B position 0
+  Whisp w = {0, 0, 0};
+  // B -> A position 42
+  Whisp w2 = {0, 0, 1};
+
+  void move() {
+    w.position++;
+    // check out of bounds
+    if (w.position > Edges[w.edge].node[1] - Edges[w.edge].node[0]) {
+      w.position = 0;
+      // new to is old from
+      uint8_t from = Edges[w.edge].node[1 - w.from];
+      // get all nodes connected to form and pick one at random
+      uint8_t to = Graph[from].nodes[random(0, Graph[from].faces)];
+      // find an edge with new to and new from
+      for (int i = 0; i < edges; i++) {
+        if ((Edges[i].node[0] == from) && (Edges[i].node[1] == to)) {
+          w.edge = i;
+          w.from = 0;
+          break;
+        } else if ((Edges[i].node[0] == to) && (Edges[i].node[1] == from)) {
+          w.edge = i;
+          w.from = 1;
+          break;
+        }
+      }
+    }
+
+    uint16_t led = Edges[w.edge].node[w.from];
+    if (w.from == 0) {
+      led += w.position;
+    } else {
+      led -= w.position;
+    }
+    leds[led] = CRGB(255, 0, 0);
+    Serial.printf("LED = %d\n", led);
+  }
+};
+
+Dodecahedron d;
+
+void setstrip(uint8_t nr, CRGB color) {
+  for (int i = 0; i < PIXELS; i++) {
+    CRGB scolor = CRGB(scale8(color.red, i / 2), scale8(color.green, i / 2),
+                       scale8(color.blue, i / 2));
+    leds[(nr * PIXELS) + i] = scolor;
+  }
+}
+void setup() {
+  Serial.begin(115200);
+  Serial.println("Booting");
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  while (WiFi.waitForConnectResult() != WL_CONNECTED) {
+    Serial.println("Connection Failed! Rebooting...");
+    delay(5000);
+    ESP.restart();
+  }
+
+  // Port defaults to 3232
+  ArduinoOTA.setPort(3232);
+  // Hostname defaults to esp3232-[MAC]
+  ArduinoOTA.setHostname(hostname);
+
+  // No authentication by default
+  // ArduinoOTA.setPassword("admin");
+
+  // Password can be set with it's md5 value as well
+  // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
+  // ArduinoOTA.setPasswordHash("21232f297a57a5a743894a0e4a801fc3");
+
+  ArduinoOTA
+      .onStart([]() {
+        String type;
+        if (ArduinoOTA.getCommand() == U_FLASH)
+          type = "sketch";
+        else  // U_SPIFFS
+          type = "filesystem";
+
+        // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS
+        // using SPIFFS.end()
+        Serial.println("Start updating " + type);
+      })
+      .onEnd([]() { Serial.println("\nEnd"); })
+      .onProgress([](unsigned int progress, unsigned int total) {
+        Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+      })
+      .onError([](ota_error_t error) {
+        Serial.printf("Error[%u]: ", error);
+        if (error == OTA_AUTH_ERROR)
+          Serial.println("Auth Failed");
+        else if (error == OTA_BEGIN_ERROR)
+          Serial.println("Begin Failed");
+        else if (error == OTA_CONNECT_ERROR)
+          Serial.println("Connect Failed");
+        else if (error == OTA_RECEIVE_ERROR)
+          Serial.println("Receive Failed");
+        else if (error == OTA_END_ERROR)
+          Serial.println("End Failed");
+      });
+
+  ArduinoOTA.begin();
+
+  Serial.println("Ready");
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+
+  FastLED.addLeds<WS2812, A1_PIN, GRB>(leds, 0 * PIXELS, PIXELS);
+  FastLED.addLeds<WS2812, A2_PIN, GRB>(leds, 1 * PIXELS, PIXELS);
+  FastLED.addLeds<WS2812, A3_PIN, GRB>(leds, 2 * PIXELS, PIXELS);
+
+  FastLED.addLeds<WS2812, A5_PIN, GRB>(leds, 4 * PIXELS, PIXELS);
+  FastLED.addLeds<WS2812, A6_PIN, GRB>(leds, 5 * PIXELS, PIXELS);
+  FastLED.addLeds<WS2812, A7_PIN, GRB>(leds, 3 * PIXELS, PIXELS);
+
+  FastLED.setBrightness(255);
+  setstrip(0, CRGB(255, 0, 0));
+  setstrip(1, CRGB(0, 255, 0));
+  setstrip(2, CRGB(0, 0, 255));
+
+  setstrip(3, CRGB(255, 20, 20));
+  setstrip(4, CRGB(20, 255, 20));
+  setstrip(5, CRGB(20, 20, 255));
+
+  pinMode(RELAY_PIN, OUTPUT);
+  digitalWrite(RELAY_PIN, HIGH);
+}
+
+uint8_t getCommand() {
+  const uint8_t numChars = 32;
+  static uint8_t ndx = 0;
+  static char receivedChars[numChars];
+  char rc;
+
+  if (Serial.available() > 0) {
+    rc = Serial.read();
+
+    if (rc != '\n') {
+      receivedChars[ndx++] = rc;
+      if (ndx >= numChars) {
+        ndx = numChars - 1;
+      }
+    } else {
+      receivedChars[ndx] = '\0';  // terminate the string
+      ndx = 0;
+      uint8_t cmd = atoi(receivedChars);
+      Serial.print("Command = ");
+      Serial.println(cmd);
+      return cmd;
+    }
+  }
+  return 0;
+}
+uint8_t gHue = 0;
+
+void loop() {
+  static uint16_t led = 0;
+  static CRGB color = CRGB(random(255), random(255), random(255));
+
+  ArduinoOTA.handle();
+
+  EVERY_N_MILLISECONDS(40) {
+    fadeToBlackBy(leds, PIXELS * 6, 5);
+    int pos = random16(PIXELS * 6);
+    leds[pos] += CHSV(gHue + random8(64), 200, 255);
+    d.move();
+    FastLED.show();
+    gHue++;
+  }
+  // leds[led++] = color;
+  if (led >= 6 * PIXELS) {
+    led = 0;
+    color = CRGB(random(255), random(255), random(255));
+  }
+
+  uint8_t cmd = getCommand();
+  if (cmd == 1) {
+    Serial.println("Relay = LOW");
+    digitalWrite(RELAY_PIN, LOW);  // off
+  }
+  if (cmd == 2) {
+    Serial.println("Relay = HIGH");
+    digitalWrite(RELAY_PIN, HIGH);  // on
+  }
+}
