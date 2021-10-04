@@ -1,12 +1,12 @@
 #include "Animation.h"
 
 #include "FastLED.h"
+#include "Flow.h"
 #include "Trails.h"
 #include "Twinkels.h"
 /*------------------------------------------------------------------------------
  * ANIMATION STATIC DEFINITIONS
  *----------------------------------------------------------------------------*/
-Display &Animation::display = Display::instance();
 Noise Animation::noise = Noise();
 Timer Animation::s_cTimer = Timer();
 uint8_t Animation::s_iAnimations = 0;
@@ -17,8 +17,9 @@ uint16_t Animation::s_iSequence = 0;
  *----------------------------------------------------------------------------*/
 Twinkels twinkels;
 Trails trails;
+Flow flow;
 /*----------------------------------------------------------------------------*/
-void Animation::begin() { display.begin(); }
+void Animation::begin() { Display::begin(); }
 
 // Render an animation frame from all active animations
 void Animation::animate() {
@@ -33,7 +34,7 @@ void Animation::animate() {
   }
   if (active_count == 0) next();
   // Commit current animation frame to the display
-  display.update();
+  Display::update();
 }
 
 // Get fps, if animate has been called t > 0
@@ -104,13 +105,15 @@ void SEQ_TRAILS_HUE_00(void) {
   trails.speed(config.trails.timer_interval, config.trails.fade_out_amount);
 }
 
+void SEQ_TEST_00(void) { flow.init(60); }
+
 // Animation sequencer jumptable implementation
 void Animation::next() {
   static void (*jump_table[])() =  //
-      {&SEQ_TWINKEL_WHITE_00, &SEQ_TWINKEL_HUE_00,   &SEQ_TWINKEL_HUE_01,
-       &SEQ_TWINKEL_HUE_02,   &SEQ_TWINKEL_HUE_03,   &SEQ_TWINKEL_HUE_04,
-       &SEQ_TWINKEL_HUE_05,   &SEQ_TWINKEL_MULTI_00, &SEQ_TWINKEL_MULTI_01,
-       &SEQ_TRAILS_HUE_00};
+      {&SEQ_TWINKEL_WHITE_00, &SEQ_TEST_00,        &SEQ_TWINKEL_HUE_00,
+       &SEQ_TWINKEL_HUE_01,   &SEQ_TWINKEL_HUE_02, &SEQ_TWINKEL_HUE_03,
+       &SEQ_TWINKEL_HUE_04,   &SEQ_TWINKEL_HUE_05, &SEQ_TWINKEL_MULTI_00,
+       &SEQ_TWINKEL_MULTI_01, &SEQ_TRAILS_HUE_00};
   if (s_iSequence >= sizeof(jump_table) / sizeof(void *)) {
     s_iSequence = 0;
   }

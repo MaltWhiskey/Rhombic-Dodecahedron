@@ -14,9 +14,9 @@ class Twinkels : public Animation {
   // amount of seconds it takes to fade a pixel to min
   float fade_out_speed = 3.0f;
   // source buffer for origional value
-  CRGB buffer[display.PIXELS] = {};
+  CRGB buffer[Display::PIXELS] = {};
   // amount of time the pixel is activated
-  float time[display.PIXELS] = {};
+  float time[Display::PIXELS] = {};
 
  private:
   // different animation modes
@@ -47,31 +47,31 @@ class Twinkels : public Animation {
   void color(CRGB c) { custom_color = c; }
   void color(uint8_t light) { hue_light = light; }
   void clear() {
-    for (uint16_t x = 0; x < display.PIXELS; x++) {
+    for (uint16_t x = 0; x < Display::PIXELS; x++) {
       time[x] = 0;
       buffer[x] = CRGB(0, 0, 0);
     }
   }
   void draw(float dt) {
     bool pixels_active = false;
-    for (uint16_t x = 0; x < display.PIXELS; x++) {
+    for (uint16_t x = 0; x < Display::PIXELS; x++) {
       if (buffer[x].r | buffer[x].g | buffer[x].b) {
         if (time[x] < fade_in_speed) {
           float t = time[x] / fade_in_speed;
           CRGB c = buffer[x];
           nscale8x3(c.r, c.g, c.b, (uint8_t)(255 * t));
-          display.leds[x] = c;
+          Display::leds[x] = c;
           time[x] += dt;
         } else if (time[x] < fade_in_speed + fade_out_speed) {
           float t = (time[x] - fade_in_speed) / fade_out_speed;
           CRGB c = buffer[x];
           nscale8x3(c.r, c.g, c.b, (uint8_t)(255 * (1 - t)));
-          display.leds[x] = c;
+          Display::leds[x] = c;
           time[x] += dt;
         } else {
           time[x] = 0;
           buffer[x] = CRGB(0, 0, 0);
-          display.leds[x] = CRGB(0, 0, 0);
+          Display::leds[x] = CRGB(0, 0, 0);
         }
         pixels_active = true;
       }
@@ -84,7 +84,7 @@ class Twinkels : public Animation {
     if (task != task_state_t::ENDING) {
       if (timer_interval.update()) {
         for (int i = 0; i < 5; i++) {
-          uint16_t x = random(0, display.PIXELS);
+          uint16_t x = random(0, Display::PIXELS);
           if (time[x] == 0) {
             if (mode_single_color) {
               if (mode_custom_color)

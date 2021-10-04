@@ -25,8 +25,6 @@ class Animation {
   static uint16_t s_iSequence;
 
  protected:
-  // Reference to the display (initialized only once)
-  static Display& display;
   // Shared noise object
   static Noise noise;
   // Postition in color palette << 8 for more resolution
