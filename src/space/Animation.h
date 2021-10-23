@@ -16,13 +16,9 @@ enum class task_state_t { INACTIVE = 0, STARTING = 1, RUNNING = 2, ENDING = 3 };
 class Animation {
  private:
   // Timer used to make rendering frequency independent
-  static Timer s_cTimer;
-  // Total pointers in animation pool
-  static uint8_t s_iAnimations;
-  // Pointers to animations in pool
-  static Animation* s_pAnimations[100];
+  static Timer animation_timer;
   // Position in the sequence table
-  static uint16_t s_iSequence;
+  static uint16_t animation_sequence;
 
  protected:
   // Shared noise object
@@ -33,8 +29,6 @@ class Animation {
   task_state_t task = task_state_t::INACTIVE;
 
  public:
-  // Adds animation to animation pool during construction
-  Animation() { s_pAnimations[s_iAnimations++] = this; };
   virtual ~Animation(){};
   // Start displaying animations
   static void begin();

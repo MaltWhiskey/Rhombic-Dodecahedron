@@ -8,6 +8,15 @@
 
 class Display {
  public:
+  static const uint8_t DODECAHEDRA = 2;
+  static const uint8_t EDGES = 24;
+  static const uint8_t VERTICES = 14;
+  static const uint16_t STRIP = 340;
+  static const uint16_t PIXELS = 6 * STRIP;
+  static CRGB leds[PIXELS];
+  static Vector3 coordinates[PIXELS];
+
+ private:
   static const uint8_t A = 0;
   static const uint8_t B = 1;
   static const uint8_t C = 2;
@@ -22,62 +31,49 @@ class Display {
   static const uint8_t L = 11;
   static const uint8_t M = 12;
   static const uint8_t N = 13;
-  static const uint8_t DODECAHEDRA = 2;
-  static const uint8_t EDGES = 24;
-  static const uint8_t VERTICES = 14;
-  static const uint16_t STRIP = 340;
-  static const uint16_t PIXELS = 6 * STRIP;
 
- private:
-  static const uint8_t A1_PIN = 32;
-  static const uint8_t A2_PIN = 12;
-  static const uint8_t A3_PIN = 27;
-  static const uint8_t A5_PIN = 16;
-  static const uint8_t A6_PIN = 17;
-  static const uint8_t A7_PIN = 26;
+  static const uint8_t DIN1 = 32;
+  static const uint8_t DIN2 = 12;
+  static const uint8_t DIN3 = 27;
+  static const uint8_t DIN4 = 17;
+  static const uint8_t DIN5 = 16;
+  static const uint8_t DIN6 = 26;
 
- private:
-  // An edge had 2 nodes and their location in the leds array
+  // An edge had 2 nodes mapping to 2 leds
   struct Edge {
     uint8_t node[2];
     uint16_t led[2];
   };
-  // Each node is connected to 3 or 4 other nodes
-  struct Connection {
+  // A node is connected to 3 or 4 other nodes
+  struct Path {
     uint8_t faces;
-    uint8_t nodes[4];
+    uint8_t node[4];
   };
 
- private:
-  // Leds on the 4 faced vertices are on 2 edges. The 3 faced vertices
-  // have no leds on them.
+  // Led edge mapping on each dodecahedra
   static Edge Edges[DODECAHEDRA][EDGES];
-  // Connection graph, specifies the paths that can be taken from each node.
-  static Connection Graph[VERTICES];
-  // Cartesian coordinate mapping
-  static Vector3 Coordinates[VERTICES];
-
- public:
-  static CRGB leds[PIXELS];
-  static Vector3 map[PIXELS];
+  // Paths that can be taken from each node
+  static Path Paths[VERTICES];
+  // Cartesian coordinates of each node
+  static Vector3 Nodes[VERTICES];
 
  public:
   static void begin();
   static void update();
   static void fade(uint8_t i);
-  static void remap(uint8_t solid, Vector3 v);
+  static void calibrate(uint8_t solid, float a);
 
  public:
   // Wisp is a position on an edge on a solid, moving in a direction
   class Wisp {
    private:
-    // On which Edges[solid][EDGES]
+    // Edge = Edges[solid][edge]
     uint8_t solid = 0;
     uint8_t edge = 0;
-    // 0 = node[0] -> node[1]
-    // 1 = node[1] -> node[0]
+    // direction 0 = node[0] -> node[1]
+    // direction 1 = node[1] -> node[0]
     uint8_t direction = 0;
-    // Relative position on the edge, depends on direction
+    // Relative position on the edge with respect to direction
     uint8_t position = 0;
 
    public:

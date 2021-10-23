@@ -7,8 +7,6 @@ class Twinkels : public Animation {
  private:
   // amount of time this animation keeps running
   Timer timer_duration = 20.0f;
-  // amount of seconds before a new pixel is added
-  Timer timer_interval = 0.01f;
   // amount of seconds it takes to fade a pixel to max
   float fade_in_speed = 1.0f;
   // amount of seconds it takes to fade a pixel to min
@@ -24,6 +22,7 @@ class Twinkels : public Animation {
   boolean mode_fade_out = true;
   boolean mode_custom_color = true;
   boolean mode_random_color = true;
+  boolean mode_mqtt_color = true;
   // light for single_color mode
   uint8_t hue_light = 0;
   // color for single_color mode, custom_color mode
@@ -31,16 +30,17 @@ class Twinkels : public Animation {
 
  public:
   void init(float duration, boolean single = false, boolean custom = false,
-            boolean fade_out = false, boolean rnd = false) {
+            boolean fade_out = false, boolean rnd = false,
+            boolean mqtt = false) {
     task = task_state_t::RUNNING;
     timer_duration = duration;
     mode_single_color = single;
     mode_fade_out = fade_out;
     mode_custom_color = custom;
+    mode_mqtt_color = mqtt;
     mode_random_color = rnd;
   }
-  void speed(float interval, float in_speed, float out_speed) {
-    timer_interval = interval;
+  void speed(float in_speed, float out_speed) {
     fade_in_speed = in_speed;
     fade_out_speed = out_speed;
   }
@@ -80,26 +80,33 @@ class Twinkels : public Animation {
     if (timer_duration.update()) {
       task = task_state_t::ENDING;
     }
-    // Consider adding a new random twinkle
     if (task != task_state_t::ENDING) {
-      if (timer_interval.update()) {
-        for (int i = 0; i < 5; i++) {
-          uint16_t x = random(0, Display::PIXELS);
-          if (time[x] == 0) {
-            if (mode_single_color) {
-              if (mode_custom_color)
-                buffer[x] = custom_color;
-              else
-                buffer[x] = CHSV(config.lights.light[hue_light].hue >> 8,
-                                 config.lights.light[hue_light].sat, 255);
+      const uint8_t div = config.twinkels.dim_divisor;
+      const uint8_t dim = config.network.mqtt_values.dim;
+      uint8_t counter = ceil(dim / (float)div);
+      uint8_t chance = (counter * div) - dim;
+      // Consider adding a new random twinkle
+      for (int i = 0; i < counter; i++) {
+        if ((i == counter - 1) && (random(0, div) < chance)) {
+          break;
+        }
+        uint16_t x = random(0, Display::PIXELS);
+        if (time[x] == 0) {
+          if (mode_single_color) {
+            if (mode_custom_color)
+              buffer[x] = custom_color;
+            else if (mode_mqtt_color)
+              buffer[x] = config.network.mqtt_values.color;
+            else
+              buffer[x] = CHSV(config.lights.light[hue_light].hue >> 8,
+                               config.lights.light[hue_light].sat, 255);
 
-            } else if (mode_random_color) {
-              buffer[x] = CRGB(random(0, 255), random(0, 255), random(0, 255));
-            } else {
-              uint8_t light = random(0, config.lights.lights);
-              buffer[x] = CHSV(config.lights.light[light].hue >> 8,
-                               config.lights.light[light].sat, 255);
-            }
+          } else if (mode_random_color) {
+            buffer[x] = CRGB(random(0, 255), random(0, 255), random(0, 255));
+          } else {
+            uint8_t light = random(0, config.lights.lights);
+            buffer[x] = CHSV(config.lights.light[light].hue >> 8,
+                             config.lights.light[light].sat, 255);
           }
         }
       }

@@ -8,6 +8,10 @@ class Test : public Animation {
   // amount of time this animation keeps running
   Timer timer_duration = 60.0f;
 
+ private:
+  // different animation modes
+  boolean mode_fade_out = true;
+
  public:
   void init(float duration) {
     task = task_state_t::RUNNING;

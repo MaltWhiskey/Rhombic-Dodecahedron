@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "ArduinoJson.h"
+#include "FastLED.h"
 /*-----------------------------------------------------------------------------
  * Evil global Config parameters
  *
@@ -17,18 +18,36 @@ struct Config {
     char ssid[32] = "-^..^-";
     char password[64] = "qazwsxedc";
     char hostname[64] = "Infinity";
-    char broker[64] = "192.168.178.24";
-    char device[64] = "Homey";
-    char topic[64] = "homie/homey/dodecahedron/onoff";
-    char huebridge[64] = "192.168.178.22";
-    char hueapi[128] = "/api/Mn0hooRxdFRet5wIpdNaNDY2y8tJHtRV6PWT2IZK/lights/";
+    char hue_ip[64] = "192.168.178.22";
+    char hue_api[128] = "/api/Mn0hooRxdFRet5wIpdNaNDY2y8tJHtRV6PWT2IZK/lights/";
+    char broker_ip[64] = "192.168.178.24";
+    struct {
+      char onoff[64] = "homey/dodecahedron/onoff";
+      char dim[64] = "homey/dodecahedron/dim";
+      char color[64] = "homey/dodecahedron/color";
+    } mqtt_topics;
+    struct {
+      boolean onoff = false;
+      uint8_t dim = 255;
+      CRGB color = CRGB(255, 150, 30);
+    } mqtt_values;
   } network;
   struct {
+    uint16_t angle_solid_0 = 0;
+    uint16_t angle_solid_1 = 0;
+  } calibration;
+  struct {
     float timer_duration = 15.0f;
-    float timer_interval = 0.001f;
+    uint8_t dim_divisor = 15;
     float fade_in_speed = 1.0f;
     float fade_out_speed = 2.0f;
   } twinkels;
+  struct {
+    float timer_duration = 15.0f;
+    uint16_t x_movement = 50;
+    uint16_t y_movement = 100;
+    uint16_t z_movement = 400;
+  } flux;
   struct {
     float timer_duration = 20.0f;
     float timer_interval = 0.022f;

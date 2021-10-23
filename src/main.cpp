@@ -95,28 +95,35 @@ void loop() {
 void task(void *parameter) {
   Serial.printf("Task running on core %d\n", xPortGetCoreID());
   DynamicJsonDocument doc(2048);
-  String hueapi = config.network.hueapi;
   WiFiClient wifi_1, wifi_2;
-  HttpClient httpclient = HttpClient(wifi_1, config.network.huebridge, 80);
+  HttpClient httpclient = HttpClient(wifi_1, config.network.hue_ip, 80);
   PubSubClient mqttclient(wifi_2);
-  mqttclient.setServer(config.network.broker, 1883);
-  mqttclient.setCallback([](char *topic, byte *payload, unsigned int length) {
-    String response;
-    for (int i = 0; i < length; i++) {
-      response += (char)payload[i];
-    }
-    Serial.printf("Callback response = %s\n", response.c_str());
-    if (response == "true") {
-      pinMode(RELAY_PIN, OUTPUT);
-      digitalWrite(RELAY_PIN, HIGH);
-    } else if (response == "false") {
-      pinMode(RELAY_PIN, OUTPUT);
-      digitalWrite(RELAY_PIN, LOW);
+  mqttclient.setServer(config.network.broker_ip, 1883);
+  String hue_api = config.network.hue_api;
+
+  mqttclient.setCallback([](char *topic_, byte *payload, unsigned int length) {
+    String response, topic(topic_);
+    for (int i = 0; i < length; i++) response += (char)payload[i];
+    if (topic.equals(config.network.mqtt_topics.onoff)) {
+      if (response == "true") {
+        pinMode(RELAY_PIN, OUTPUT);
+        digitalWrite(RELAY_PIN, HIGH);
+      } else if (response == "false") {
+        pinMode(RELAY_PIN, OUTPUT);
+        digitalWrite(RELAY_PIN, LOW);
+      }
+    } else if (topic.equals(config.network.mqtt_topics.dim)) {
+      config.network.mqtt_values.dim = 2.55f * response.toInt();
+    } else if (topic.equals(config.network.mqtt_topics.color)) {
+      uint8_t hue = (255 * response.toInt()) / 360;
+      response = response.substring(response.indexOf(',') + 1);
+      uint8_t sat = (255 * response.toInt()) / 100;
+      config.network.mqtt_values.color = CRGB(CHSV(hue, sat, 255));
     }
   });
 
   auto handleHTTP = [&](decltype(config.lights.light[0]) &light) {
-    int httpcode = httpclient.get((hueapi + light.name).c_str());
+    int httpcode = httpclient.get((hue_api + light.name).c_str());
     if (httpcode == HTTP_SUCCESS) {
       DeserializationError err =
           deserializeJson(doc, httpclient.responseBody());
@@ -132,17 +139,16 @@ void task(void *parameter) {
       Serial.printf("[HTTP] GET... failed, error: %d\n",
                     httpclient.responseStatusCode());
     }
-    Serial.printf("name=%s, on=%d, bri=%d,  hue=%d, sat=%d\n", light.name,
-                  light.on, light.bri, light.hue, light.sat);
   };
 
   auto handleMQTT = [&]() {
     if (!mqttclient.connected()) {
-      if (mqttclient.connect(config.network.device)) {
-        mqttclient.subscribe(config.network.topic);
-        Serial.printf("Subcribed to: %s\n", config.network.topic);
+      if (mqttclient.connect(config.network.hostname)) {
+        mqttclient.subscribe(config.network.mqtt_topics.onoff);
+        mqttclient.subscribe(config.network.mqtt_topics.dim);
+        mqttclient.subscribe(config.network.mqtt_topics.color);
       } else {
-        Serial.printf("Can't Subcribe to: %s\n", config.network.topic);
+        Serial.printf("Can't Subcribe\n");
       }
     }
     if (mqttclient.connected()) {
@@ -152,7 +158,6 @@ void task(void *parameter) {
 
   while (true) {
     if (WiFi.status() != WL_CONNECTED) {
-      WiFi.disconnect();
       WiFi.reconnect();
     } else {
       for (int i = 0; i < config.lights.lights; i++) {

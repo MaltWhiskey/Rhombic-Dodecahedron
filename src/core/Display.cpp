@@ -1,4 +1,6 @@
 #include "display.h"
+
+#include "main.h"
 /******************************************************************************
  *          How to order and travel around a rhombic dodecahedron             *
  * ****************************************************************************
@@ -13,7 +15,7 @@
  *                         |     |     |     |
  *                         N     N     N     N
  *****************************************************************************/
-Display::Edge Display::Edges[DODECAHEDRA][EDGES] = {
+Display::Edge Display::Edges[DODECAHEDRA][EDGES] = {    // GPIO
     {{{A, B}, {0, 42}},    {{B, H}, {42, 84}},          // DIN1
      {{H, K}, {85, 127}},  {{K, I}, {127, 169}},        //
      {{E, K}, {170, 212}}, {{K, N}, {212, 254}},        //
@@ -39,23 +41,24 @@ Display::Edge Display::Edges[DODECAHEDRA][EDGES] = {
      {{G, B}, {1870, 1912}}, {{B, E}, {1912, 1954}},    //
      {{E, C}, {1955, 1997}}, {{C, F}, {1997, 2039}}}};  //
 
-Display::Connection Display::Graph[VERTICES] = {{3, {B, C, D}},     // A
-                                                {4, {A, G, H, E}},  // B
-                                                {4, {A, E, I, F}},  // C
-                                                {4, {A, F, J, G}},  // D
-                                                {3, {B, K, C}},     // E
-                                                {3, {C, L, D}},     // F
-                                                {3, {D, M, B}},     // G
-                                                {3, {M, B, K}},     // H
-                                                {3, {K, C, L}},     // I
-                                                {3, {L, D, M}},     // J
-                                                {4, {H, E, I, N}},  // K
-                                                {4, {I, F, J, N}},  // L
-                                                {4, {J, G, H, N}},  // M
-                                                {3, {K, L, M}}};    // N
+Display::Path Display::Paths[VERTICES] =  // Node
+    {{3, {B, C, D}},                      // A
+     {4, {A, G, H, E}},                   // B
+     {4, {A, E, I, F}},                   // C
+     {4, {A, F, J, G}},                   // D
+     {3, {B, K, C}},                      // E
+     {3, {C, L, D}},                      // F
+     {3, {D, M, B}},                      // G
+     {3, {M, B, K}},                      // H
+     {3, {K, C, L}},                      // I
+     {3, {L, D, M}},                      // J
+     {4, {H, E, I, N}},                   // K
+     {4, {I, F, J, N}},                   // L
+     {4, {J, G, H, N}},                   // M
+     {3, {K, L, M}}};                     // N
 
 // Cartesian coordinates with node A on top and lid to the front
-Vector3 Display::Coordinates[VERTICES] = {
+Vector3 Display::Nodes[VERTICES] = {
     Vector3(0, sqrt(3) / 2, 0),                         // A
     Vector3(0, sqrt(3) / 3, sqrt(6) / 3),               // B
     Vector3(-sqrt(2) / 2, sqrt(3) / 3, -sqrt(6) / 6),   // C
@@ -74,35 +77,51 @@ Vector3 Display::Coordinates[VERTICES] = {
 
 // Static memory for all pixels
 CRGB Display::leds[PIXELS];
-// Static coordinates for all pixels
-Vector3 Display::map[PIXELS];
+// Coordinates to hues mapping
+Vector3 Display::coordinates[PIXELS];
 
 void Display::begin() {
-  FastLED.addLeds<WS2813, A1_PIN, GRB>(leds, 0 * STRIP, STRIP);
-  FastLED.addLeds<WS2813, A2_PIN, GRB>(leds, 1 * STRIP, STRIP);
-  FastLED.addLeds<WS2813, A3_PIN, GRB>(leds, 2 * STRIP, STRIP);
+  calibrate(0, config.calibration.angle_solid_0);
+  calibrate(1, config.calibration.angle_solid_1);
 
-  FastLED.addLeds<WS2813, A7_PIN, GRB>(leds, 3 * STRIP, STRIP);
-  FastLED.addLeds<WS2813, A5_PIN, GRB>(leds, 4 * STRIP, STRIP);
-  FastLED.addLeds<WS2813, A6_PIN, GRB>(leds, 5 * STRIP, STRIP);
+  FastLED.addLeds<WS2813, DIN1, GRB>(leds, 0 * STRIP, STRIP);
+  FastLED.addLeds<WS2813, DIN2, GRB>(leds, 1 * STRIP, STRIP);
+  FastLED.addLeds<WS2813, DIN3, GRB>(leds, 2 * STRIP, STRIP);
+  FastLED.addLeds<WS2813, DIN4, GRB>(leds, 3 * STRIP, STRIP);
+  FastLED.addLeds<WS2813, DIN5, GRB>(leds, 4 * STRIP, STRIP);
+  FastLED.addLeds<WS2813, DIN6, GRB>(leds, 5 * STRIP, STRIP);
   FastLED.setBrightness(255);
   FastLED.setDither(DISABLE_DITHER);
 }
-void Display::update() { FastLED.show(); }
+void Display::update() {
+  // for (int i = 0; i < STRIP; i++) {
+  //   leds[0 * STRIP + i] = CRGB(255, 0, 0);
+  //   leds[1 * STRIP + i] = CRGB(0, 255, 0);
+  //   leds[2 * STRIP + i] = CRGB(0, 0, 255);
+  //   leds[3 * STRIP + i] = CRGB(255, 0, 0);
+  //   leds[4 * STRIP + i] = CRGB(0, 255, 0);
+  //   leds[5 * STRIP + i] = CRGB(0, 0, 255);
+  // }
+  FastLED.show();
+}
 void Display::fade(uint8_t i) { fadeToBlackBy(leds, PIXELS, i); }
 
-void Display::remap(uint8_t solid, Vector3 r) {
-  Vector3 offset = Vector3(1, 1, 1);
+// Calibrate led coordinates of specified solid
+void Display::calibrate(uint8_t solid, float angle) {
+  Vector3 axis = Vector3(0, 1, 0);
+  Vector3 translation = Vector3(1, 1, 1);
+  Vector3 scale = Vector3(0.5, 0.5, 0.5);
   for (uint8_t edge = 0; edge < Display::EDGES; edge++) {
-    uint16_t lower = Edges[solid][edge].led[0];
-    uint16_t upper = Edges[solid][edge].led[1];
-    Vector3 v0 = (Coordinates[Edges[solid][edge].node[0]] + offset) / 2;
-    Vector3 v1 = (Coordinates[Edges[solid][edge].node[1]] + offset) / 2;
-    Vector3 delta = (v1 - v0) / (upper - lower);
-    v0 += (offset * solid);
-    // include last led since first and last led are also on other edges
-    for (uint16_t led = lower; led <= upper; led++) {
-      map[led] = v0;
+    uint16_t l0 = Edges[solid][edge].led[0];
+    uint16_t l1 = Edges[solid][edge].led[1];
+    Vector3 v0 = axis.rotate(angle, Nodes[Edges[solid][edge].node[0]]) +
+                 translation * scale;
+    Vector3 v1 = axis.rotate(angle, Nodes[Edges[solid][edge].node[1]]) +
+                 translation * scale;
+    Vector3 delta = (v1 - v0) / (l1 - l0);
+    // include last led since both first and last led are on the edge
+    for (uint16_t lx = l0; lx <= l1; lx++) {
+      coordinates[lx] = v0;
       v0 += delta;
     }
   }
@@ -110,6 +129,7 @@ void Display::remap(uint8_t solid, Vector3 r) {
 
 void Display::Wisp::init(uint8_t solid_, uint8_t edge_, uint8_t direction_,
                          uint8_t position_, CRGB color_) {
+  // Safe initialization of parameters
   solid = solid_ & 1;
   edge = edge_ % EDGES;
   direction = direction_ & 1;
@@ -129,16 +149,16 @@ uint16_t Display::Wisp::led() {
 
 void Display::Wisp::move() {
   if (++position > (Edges[solid][edge].led[1] - Edges[solid][edge].led[0])) {
+    // Start position on new node
+    position = 0;
     // Arrived at new node.
     uint8_t new_node = Edges[solid][edge].node[1 - direction];
-    // start position on new node
-    position = 0;
     // Arrived from old node
     uint8_t old_node = Edges[solid][edge].node[direction];
     // Going to random next node but not back to old node
     uint8_t next_node = old_node;
     while (next_node == old_node)
-      next_node = Graph[new_node].nodes[random(0, Graph[new_node].faces)];
+      next_node = Paths[new_node].node[random(0, Paths[new_node].faces)];
     // find an edge going from new node to next node or visa versa
     for (int i = 0; i < EDGES; i++) {
       if ((Edges[solid][i].node[0] == new_node) &&
