@@ -35,6 +35,11 @@ class Flux : public Animation {
     palette = palettes.get_next_palette();
   }
 
+  void end() {
+    mode_fade_out = true;
+    task = task_state_t::ENDING;
+  }
+
   void draw(float dt) {
     if (timer_duration.update()) {
       task = task_state_t::ENDING;

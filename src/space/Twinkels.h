@@ -52,6 +52,12 @@ class Twinkels : public Animation {
       buffer[x] = CRGB(0, 0, 0);
     }
   }
+
+  void end() {
+    mode_fade_out = true;
+    task = task_state_t::ENDING;
+  }
+
   void draw(float dt) {
     bool pixels_active = false;
     for (uint16_t x = 0; x < Display::PIXELS; x++) {

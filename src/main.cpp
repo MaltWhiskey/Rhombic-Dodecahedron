@@ -119,6 +119,8 @@ void task(void *parameter) {
       response = response.substring(response.indexOf(',') + 1);
       uint8_t sat = (255 * response.toInt()) / 100;
       config.network.mqtt_values.color = CRGB(CHSV(hue, sat, 255));
+    } else if (topic.equals(config.network.mqtt_topics.scene)) {
+      config.network.mqtt_values.scene = response.toInt();
     }
   });
 
@@ -147,6 +149,7 @@ void task(void *parameter) {
         mqttclient.subscribe(config.network.mqtt_topics.onoff);
         mqttclient.subscribe(config.network.mqtt_topics.dim);
         mqttclient.subscribe(config.network.mqtt_topics.color);
+        mqttclient.subscribe(config.network.mqtt_topics.scene);
       } else {
         Serial.printf("Can't Subcribe\n");
       }

@@ -36,7 +36,10 @@ class Trails : public Animation {
     timer_interval = interval;
     fade_out_amount = out_amount;
   }
-
+  void end() {
+    mode_fade_out = true;
+    task = task_state_t::ENDING;
+  }
   void draw(float dt) {
     Display::fade(fade_out_amount);
     if (timer_duration.update()) {

@@ -36,8 +36,12 @@ class Animation {
   static void animate();
   // Schedule next animations from sequence
   static void next();
+  // select animations from sequence
+  static void select();
   // Draws antimation frame respecting elapsed time
   virtual void draw(float dt) = 0;
+  // Gracefully terminate animation
+  virtual void end() = 0;
   // Get current fps
   static float fps();
 };

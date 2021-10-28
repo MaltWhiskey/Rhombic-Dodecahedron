@@ -33,9 +33,18 @@ void Animation::animate() {
     }
     if (animation.task != task_state_t::INACTIVE) {
       active_count++;
+      if (config.network.mqtt_values.scene >= 0) {
+        animation.end();
+      }
     }
   }
-  if (active_count == 0) next();
+  if (active_count == 0) {
+    if (config.network.mqtt_values.scene >= 0) {
+      select();
+    } else {
+      next();
+    }
+  }
   // Commit current animation frame to the display
   Display::update();
 }
@@ -54,7 +63,6 @@ void SEQ_TWINKEL_WHITE_00(void) {
   twinkels.speed(config.twinkels.fade_in_speed, config.twinkels.fade_out_speed);
   twinkels.color(CRGB(255, 150, 30));
 }
-
 void SEQ_TWINKEL_HUE_00(void) {
   twinkels.init(config.twinkels.timer_duration, true);
   twinkels.speed(config.twinkels.fade_in_speed, config.twinkels.fade_out_speed);
@@ -98,14 +106,13 @@ void SEQ_TRAILS_HUE_00(void) {
   trails.init(config.trails.timer_duration, true);
   trails.speed(config.trails.timer_interval, config.trails.fade_out_amount);
 }
-
 void SEQ_FLUX_00(void) {
   flux.init(config.flux.timer_duration, config.flux.x_movement,
             config.flux.y_movement, config.flux.z_movement);
 }
-
 void SEQ_TWINKEL_MQTT_00(void) {
-  twinkels.init(100, true, false, false, false, true);
+  twinkels.init(config.twinkels.timer_duration, true, false, false, false,
+                true);
   twinkels.speed(config.twinkels.fade_in_speed, config.twinkels.fade_out_speed);
 }
 
@@ -120,4 +127,40 @@ void Animation::next() {
     animation_sequence = 0;
   }
   jump_table[animation_sequence++]();
+}
+
+void SEL_TWINKEL_WHITE_00(void) {
+  twinkels.clear();
+  twinkels.init(0, true, true);
+  twinkels.speed(config.twinkels.fade_in_speed, config.twinkels.fade_out_speed);
+  twinkels.color(CRGB(255, 150, 30));
+}
+void SEL_TWINKEL_MQTT_00(void) {
+  twinkels.init(0, true, false, false, false, true);
+  twinkels.speed(config.twinkels.fade_in_speed, config.twinkels.fade_out_speed);
+}
+void SEL_FLUX_00(void) {
+  flux.init(0, config.flux.x_movement, config.flux.y_movement,
+            config.flux.z_movement);
+}
+void SEL_TRAILS_HUE_00(void) {
+  trails.init(0, true);
+  trails.speed(config.trails.timer_interval, config.trails.fade_out_amount);
+}
+void SEL_TWINKEL_MULTI_00(void) {
+  twinkels.init(0);
+  twinkels.speed(config.twinkels.fade_in_speed, config.twinkels.fade_out_speed);
+}
+
+// Animation selector jumptable implementation
+void Animation::select() {
+  static void (*jump_table[])() =  //
+      {&SEL_TWINKEL_WHITE_00, &SEL_TWINKEL_MQTT_00, &SEL_FLUX_00,
+       &SEL_TRAILS_HUE_00, &SEL_TWINKEL_MULTI_00};
+  if (config.network.mqtt_values.scene >= sizeof(jump_table) / sizeof(void *)) {
+    next();
+  } else {
+    jump_table[config.network.mqtt_values.scene]();
+  }
+  config.network.mqtt_values.scene = -1;
 }

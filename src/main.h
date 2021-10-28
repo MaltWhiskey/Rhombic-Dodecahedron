@@ -25,10 +25,12 @@ struct Config {
       char onoff[64] = "homey/dodecahedron/onoff";
       char dim[64] = "homey/dodecahedron/dim";
       char color[64] = "homey/dodecahedron/color";
+      char scene[64] = "homey/dodecahedron/scene";
     } mqtt_topics;
     struct {
       boolean onoff = false;
       uint8_t dim = 255;
+      int16_t scene = -1;
       CRGB color = CRGB(255, 150, 30);
     } mqtt_values;
   } network;
